@@ -33,7 +33,7 @@ export const APPS = [
     tagline: 'Hazard Identification & Risk Assessment',
     accent: '#3b82f6',
     icon: ShieldAlert,
-    url: env.VITE_HIRA_URL || 'https://hira.vercel.app',
+    url: env.VITE_HIRA_URL || 'https://hira-ruddy.vercel.app',
   },
   {
     id: 'incident-ira',
@@ -81,6 +81,6 @@ export const APPS = [
     tagline: 'PTW safety permits & approvals',
     accent: '#f97316',
     icon: FileCheck2,
-    url: env.VITE_PERMIT_TO_WORK_URL || 'https://permit-to-work.vercel.app',
+    url: env.VITE_PERMIT_TO_WORK_URL || 'https://permit-to-work-two.vercel.app',
   },
 ]
