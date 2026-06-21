@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function signedIn() { return request.auth != null; }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isApprovedMemberOf(orgId) {
+      return signedIn()
+        && myProfile().orgId == orgId
+        && myProfile().status == 'approved';
+    }
+
+    function isAdminOf(orgId) {
+      return isApprovedMemberOf(orgId) && myProfile().role == 'admin';
+    }
+
+    // ── Organizations ──
+    match /organizations/{orgId} {
+      // Members only — org docs hold name/address/notificationEmail.
+      allow read: if isApprovedMemberOf(orgId);
+      // Created during register-org flow (the creator records themselves as admin
+      // in the same batch); updated/deleted by org admins only.
+      allow create: if signedIn();
+      allow update, delete: if isAdminOf(orgId);
+
+      // ── Consultations / meetings ──
+      // Any approved member can read, create and edit meetings.
+      // Deleting an entire meeting record stays admin-only.
+      match /consultations/{meetingId} {
+        allow read, create, update: if isApprovedMemberOf(orgId);
+        allow delete: if isAdminOf(orgId);
+      }
+
+      // ── Facility sites ── members read; admins manage.
+      match /sites/{siteId} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow create, update, delete: if isAdminOf(orgId);
+      }
+    }
+
+    // ── Users ──
+    match /users/{uid} {
+      // A user reads their own profile; admins read members of their own org.
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        isAdminOf(resource.data.orgId)
+      );
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn() && (
+        request.auth.uid == uid ||
+        isAdminOf(resource.data.orgId)
+      );
+    }
+
+    // ── Public org name index ── minimal { orgId, name } so signup can resolve
+    // an org by name / list orgs without reading the member-only organizations docs.
+    match /orgIndex/{nameLower} {
+      allow read: if true;
+      // Created in the register-org batch (or admin "make joinable").
+      allow create, update: if signedIn();
+      allow delete: if false;
+    }
+  }
+}

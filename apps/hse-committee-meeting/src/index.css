@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  /* Custom easing curves — built-in CSS easings are too weak for intentional
+     UI motion. Strong ease-out for enter/press; ease-in-out for on-screen
+     movement. (Emil Kowalski's design-engineering defaults.) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-clay-bg text-ink-900 font-sans antialiased;
+  margin: 0;
+}
+
+/* Animated aurora background used on auth + public pages */
+.aurora {
+  background:
+    radial-gradient(40% 50% at 15% 20%, rgba(34, 197, 94, 0.38), transparent 60%),
+    radial-gradient(40% 50% at 85% 15%, rgba(132, 204, 22, 0.28), transparent 60%),
+    radial-gradient(50% 60% at 75% 85%, rgba(16, 185, 129, 0.32), transparent 60%),
+    radial-gradient(40% 50% at 20% 90%, rgba(20, 83, 45, 0.30), transparent 60%),
+    #06140d;
+  background-size: 200% 200%;
+  animation: aurora-move 18s ease infinite;
+}
+
+@keyframes aurora-move {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+/* Glass card */
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e0c9bc; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #d3b3a3; background-clip: content-box; }
+
+/* Reusable component classes */
+@layer components {
+  /* ── Claymorphism core surfaces (warm coral-clay) ────────────────────────
+     Raised = light top-left highlight + warm dark bottom-right drop. Inputs
+     are recessed (inset). Pressable controls sink on :active. Coral = accent. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold shadow-clay-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none active:scale-[0.97] active:shadow-clay-pressed;
+    /* Only animate what actually changes; snappy press feedback (~140ms). */
+    transition: transform 140ms var(--ease-out), box-shadow 140ms var(--ease-out), background-color 140ms var(--ease-out);
+  }
+  .btn-primary {
+    @apply btn bg-brand-500 text-white hover:bg-brand-600 shadow-clay-brand;
+  }
+  .btn-ghost {
+    @apply btn bg-clay-surface text-ink-700 hover:bg-clay-100;
+  }
+  .btn-soft {
+    @apply btn bg-brand-50 text-brand-700 hover:bg-brand-100;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 shadow-[5px_5px_12px_rgba(220,38,38,0.28),-5px_-5px_12px_rgba(255,255,255,0.75)];
+  }
+  .input {
+    @apply w-full rounded-2xl border border-transparent bg-clay-surface px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 outline-none shadow-clay-inset focus:border-brand-300 focus:ring-2 focus:ring-brand-200;
+    transition: box-shadow 150ms var(--ease-out), border-color 150ms var(--ease-out);
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500;
+  }
+  .card {
+    @apply rounded-3xl bg-clay-surface shadow-clay;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold shadow-clay-sm;
+    transition: transform 140ms var(--ease-out), background-color 140ms var(--ease-out), color 140ms var(--ease-out);
+  }
+  /* Pressable chips (filters/toggles) get the same snappy sink as buttons. */
+  button.chip:active {
+    transform: scale(0.96);
+  }
+
+  /* Clay helper utilities for surfaces that don't use .card/.btn */
+  .clay {
+    @apply rounded-3xl bg-clay-surface shadow-clay;
+  }
+  .clay-inset {
+    @apply rounded-2xl bg-clay-surface shadow-clay-inset;
+  }
+  .clay-pressed {
+    @apply rounded-2xl bg-clay-surface shadow-clay-pressed;
+  }
+}
+
+/* Respect users who prefer reduced motion: remove movement + looping
+   animations, keep gentle opacity/color transitions that aid comprehension. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .aurora {
+    animation: none !important;
+  }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body {
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  /* QR print sheet: fixed 3-up grid, each label kept whole across pages. */
+  .qr-print-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8mm !important;
+  }
+  .qr-print-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    min-height: 46mm;
+    box-shadow: none !important;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Meeting module helper classes (Consultation / Users / Manage Sites) — light
+   green claymorphism, matching the Fire Marshal-style shell.
+   ─────────────────────────────────────────────────────────────────────────── */
+/* `app-ui` only hides chrome when printing (the print overlay shows instead). */
+@media print { .app-ui { display: none !important; } }
+
+.glass-panel {
+  background: #fbf4ef; /* clay-surface */
+  border: 1px solid rgba(227, 204, 191, 0.5);
+  box-shadow: 6px 6px 14px rgba(190, 160, 148, 0.35), -6px -6px 14px rgba(255, 255, 255, 0.9);
+  transition: transform 0.24s var(--ease-out), box-shadow 0.24s var(--ease-out), border-color 0.24s var(--ease-out);
+}
+.glass-panel:hover { transform: translateY(-4px); }
+
+.app-tabbar { display: inline-flex; align-items: center; }
+
+.app-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.95rem;
+  border-radius: 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4d5a73;
+  background: #fbf4ef;
+  box-shadow: 3px 3px 8px rgba(190, 160, 148, 0.35), -3px -3px 8px rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out), color 0.14s var(--ease-out), background-color 0.14s var(--ease-out);
+}
+.app-tab:hover { color: #15803d; }
+.app-tab:active { transform: scale(0.97); box-shadow: inset 5px 5px 10px rgba(190, 160, 148, 0.5), inset -4px -4px 8px rgba(255, 255, 255, 0.8); }
+.app-tab-active {
+  color: #15803d;
+  background: #dcfce7; /* brand-100 */
+  box-shadow: inset 4px 4px 8px rgba(190, 160, 148, 0.4), inset -4px -4px 8px rgba(255, 255, 255, 0.9);
+}
+.app-tab-success:not(.app-tab-active) { color: #16a34a; }
+
+.custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+.custom-scroll::-webkit-scrollbar-thumb { background: #e0c9bc; border-radius: 4px; }
+.custom-scroll::-webkit-scrollbar-thumb:hover { background: #d3b3a3; }

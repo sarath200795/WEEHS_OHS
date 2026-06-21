@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function signedIn() { return request.auth != null; }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isApprovedMemberOf(orgId) {
+      return signedIn()
+        && myProfile().orgId == orgId
+        && myProfile().status == 'approved';
+    }
+
+    function isAdminOf(orgId) {
+      return isApprovedMemberOf(orgId) && myProfile().role == 'admin';
+    }
+
+    // Enum allow-lists — MUST mirror the Fire Marshal app's constants.
+    function validType(v)     { return v in ['ABC', 'CO2', 'Modular']; }
+    function validCapacity(v) { return v in ['2 Kg', '4.5 Kg', '5 Kg', '6 Kg']; }
+    function validEntity(v)   { return v in ['1P', '2P', '3P', 'Fitso', 'EBO']; }
+    function validRegion(v)   { return v == '' || v in ['North', 'South', 'East', 'West']; }
+    function validStatus(v)   { return v in ['active', 'to_be_refilled', 'in_process_refilling', 'closed']; }
+    function validDefect(v)   { return v in ['pin', 'stand', 'hose_pipe', 'handle', 'empty', 'over_pressurized']; }
+
+    function validExtinguisher(d) {
+      return d.keys().hasAll(['type', 'capacity', 'entity', 'centerName', 'status'])
+        && validType(d.type)
+        && validCapacity(d.capacity)
+        && validEntity(d.entity)
+        && (!('region' in d) || validRegion(d.region))
+        && validStatus(d.status)
+        && d.centerName is string && d.centerName.size() <= 200
+        && (!('serialNo' in d) || (d.serialNo is string && d.serialNo.size() <= 60));
+    }
+
+    // ── Organizations ──
+    match /organizations/{orgId} {
+      allow read: if isApprovedMemberOf(orgId);
+      allow create: if signedIn();
+      allow update, delete: if isAdminOf(orgId);
+
+      // ── Extinguishers (Fire Marshal app) ──
+      match /extinguishers/{extId} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow create, update: if isApprovedMemberOf(orgId)
+          && validExtinguisher(request.resource.data);
+        allow delete: if isAdminOf(orgId);
+      }
+
+      // ── Reports / approval queue (Fire Marshal app) ──
+      match /reports/{reportId} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow create: if request.resource.data.approvalStatus == 'pending'
+          && request.resource.data.source in ['qr', 'portal']
+          && request.resource.data.kind in ['defect', 'status_change']
+          && request.resource.data.extId is string
+          && exists(/databases/$(database)/documents/organizations/$(orgId)/extinguishers/$(request.resource.data.extId))
+          && (request.resource.data.kind != 'defect' || validDefect(request.resource.data.defectType))
+          && (request.resource.data.kind != 'status_change' || validStatus(request.resource.data.newStatus))
+          && (!('note' in request.resource.data) || request.resource.data.note.size() <= 500)
+          && (!('extLabel' in request.resource.data) || request.resource.data.extLabel.size() <= 200);
+        allow update, delete: if isApprovedMemberOf(orgId);
+      }
+
+      // ── Inspection form templates (Inspections portal) ──
+      // Approved members create/run inspections; only admins delete templates.
+      match /inspectionTemplates/{templateId} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow create, update: if isApprovedMemberOf(orgId);
+        allow delete: if isAdminOf(orgId);
+      }
+
+      // ── Completed inspection records (Inspections portal) ──
+      match /inspectionRecords/{recordId} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow create, update: if isApprovedMemberOf(orgId);
+        allow delete: if isAdminOf(orgId);
+      }
+
+      // ── Sites (Inspections portal) ── members read; only admins manage.
+      match /sites/{siteId} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow create, update, delete: if isAdminOf(orgId);
+      }
+
+      // ── Audit log ── append-only, immutable.
+      match /auditLogs/{logId} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow create: if isApprovedMemberOf(orgId);
+        allow update, delete: if false;
+      }
+
+      // ── Meta (stats counters) ──
+      match /meta/{doc} {
+        allow read: if isApprovedMemberOf(orgId);
+        allow write: if isApprovedMemberOf(orgId);
+      }
+    }
+
+    // ── Users ──
+    match /users/{uid} {
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        isAdminOf(resource.data.orgId)
+      );
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn() && (
+        request.auth.uid == uid ||
+        isAdminOf(resource.data.orgId)
+      );
+    }
+
+    // ── Public org name index ──
+    match /orgIndex/{nameLower} {
+      allow read: if true;
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    // ── Public QR mirror (Fire Marshal app) ──
+    match /qr/{token} {
+      allow read: if true;
+      allow create: if isApprovedMemberOf(request.resource.data.orgId);
+      allow update, delete: if isApprovedMemberOf(resource.data.orgId);
+    }
+  }
+}
