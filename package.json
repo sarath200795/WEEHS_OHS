@@ -1,0 +1,16 @@
+{
+  "name": "weehs-ohs",
+  "private": true,
+  "version": "1.0.0",
+  "description": "WEEHS OHS — monorepo hub for the HSE/OHS app suite",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:hub": "npm run dev --workspace apps/hub",
+    "build:hub": "npm run build --workspace apps/hub",
+    "preview:hub": "npm run preview --workspace apps/hub",
+    "build:all": "npm run build --workspaces --if-present"
+  }
+}
