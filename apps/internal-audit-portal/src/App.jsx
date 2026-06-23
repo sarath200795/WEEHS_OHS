@@ -7,12 +7,7 @@ import AppLayout from './components/AppLayout'
 import ConfigNotice from './components/ConfigNotice'
 import { FullPageSpinner } from './components/ui/Spinner'
 
-// Auth
-const Login = lazy(() => import('./pages/auth/Login'))
-const Signup = lazy(() => import('./pages/auth/Signup'))
-const RegisterOrg = lazy(() => import('./pages/auth/RegisterOrg'))
-const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'))
-const PendingApproval = lazy(() => import('./pages/auth/PendingApproval'))
+// Login/signup routes have been removed; the app opens straight into the app.
 
 // Legal
 const Privacy = lazy(() => import('./pages/legal/Privacy'))
@@ -28,14 +23,6 @@ const Sites = lazy(() => import('./pages/app/Sites'))
 const Admin = lazy(() => import('./pages/app/Admin'))
 const Profile = lazy(() => import('./pages/app/Profile'))
 
-/** Redirect authenticated users away from auth pages. */
-function PublicOnly({ children }) {
-  const { isAuthenticated, isApproved, loading } = useAuth()
-  if (loading) return null
-  if (isAuthenticated) return <Navigate to={isApproved ? '/' : '/pending'} replace />
-  return children
-}
-
 export default function App() {
   const { isConfigured } = useAuth()
 
@@ -44,13 +31,6 @@ export default function App() {
   return (
     <Suspense fallback={<FullPageSpinner />}>
     <Routes>
-      {/* Public auth routes */}
-      <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
-      <Route path="/signup" element={<PublicOnly><Signup /></PublicOnly>} />
-      <Route path="/register-org" element={<PublicOnly><RegisterOrg /></PublicOnly>} />
-      <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
-      <Route path="/pending" element={<PendingApproval />} />
-
       {/* Legal */}
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />

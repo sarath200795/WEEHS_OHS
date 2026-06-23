@@ -1,117 +1,51 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-  signOut as fbSignOut,
-  onAuthStateChanged,
-  updateProfile,
-  deleteUser,
-} from 'firebase/auth'
-import { auth, isFirebaseConfigured } from '../firebase'
-import {
-  createOrganization,
-  createPendingMember,
-  findOrgByName,
-  getUserProfile,
-} from '../lib/firestore'
-import { isApprover as roleIsApprover, isAdmin as roleIsAdmin } from '../lib/permissions'
+import { createContext, useContext } from 'react'
 
+// Login has been removed from this app. Instead of subscribing to Firebase
+// Auth, we provide a static "already signed-in" context so the app opens
+// straight into its dashboard. The exported shape matches the original
+// AuthProvider exactly, so every useAuth() consumer keeps working.
 const AuthContext = createContext(null)
 
+const MOCK_USER = {
+  uid: 'local-user',
+  email: 'demo@weehs.local',
+  displayName: 'Demo User',
+}
+
+const MOCK_PROFILE = {
+  uid: 'local-user',
+  name: 'Demo User',
+  email: 'demo@weehs.local',
+  role: 'admin',
+  status: 'approved',
+  orgId: 'local-org',
+  orgName: 'Demo Organization',
+}
+
+// Auth actions are no-ops now — kept so callers (e.g. the Layout sign-out
+// button) don't crash.
+const noop = async () => {}
+
+const value = {
+  user: MOCK_USER,
+  profile: MOCK_PROFILE,
+  loading: false,
+  isAuthed: true,
+  isApproved: true,
+  isAdmin: true,
+  isApprover: true,
+  role: MOCK_PROFILE.role,
+  orgId: MOCK_PROFILE.orgId,
+  orgName: MOCK_PROFILE.orgName,
+  registerOrganization: noop,
+  signUpMember: noop,
+  login: noop,
+  resetPassword: noop,
+  signOut: noop,
+  refreshProfile: async () => MOCK_PROFILE,
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null) // firebase auth user
-  const [profile, setProfile] = useState(null) // users/{uid} doc
-  const [loading, setLoading] = useState(true)
-
-  const refreshProfile = useCallback(async (uid) => {
-    const p = await getUserProfile(uid)
-    setProfile(p)
-    return p
-  }, [])
-
-  useEffect(() => {
-    if (!isFirebaseConfigured) {
-      setLoading(false)
-      return
-    }
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u)
-      if (u) {
-        await refreshProfile(u.uid)
-      } else {
-        setProfile(null)
-      }
-      setLoading(false)
-    })
-    return unsub
-  }, [refreshProfile])
-
-  // Register a brand new organization; caller becomes admin.
-  const registerOrganization = async ({ orgName, address, name, email, phone, password }) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, password)
-    try {
-      const existing = await findOrgByName(orgName)
-      if (existing) {
-        throw new Error('An organization with that name already exists. Try signing up to join it.')
-      }
-      await updateProfile(cred.user, { displayName: name })
-      await createOrganization({ orgName, address, uid: cred.user.uid, name, email, phone })
-      await refreshProfile(cred.user.uid)
-    } catch (err) {
-      await deleteUser(cred.user).catch(() => {})
-      throw err
-    }
-  }
-
-  // Sign up to join an existing org (pending admin approval, default Technician).
-  const signUpMember = async ({ orgId, orgName, name, email, phone, password }) => {
-    if (!orgId) throw new Error('Please select your organization.')
-    const cred = await createUserWithEmailAndPassword(auth, email, password)
-    try {
-      await updateProfile(cred.user, { displayName: name })
-      await createPendingMember({ uid: cred.user.uid, name, email, phone, orgId, orgName: orgName || '' })
-      await refreshProfile(cred.user.uid)
-    } catch (err) {
-      await deleteUser(cred.user).catch(() => {})
-      throw err
-    }
-  }
-
-  const login = async ({ email, password }) => {
-    const cred = await signInWithEmailAndPassword(auth, email, password)
-    await refreshProfile(cred.user.uid)
-  }
-
-  // Email the user a password-reset link. Firebase handles the reset page.
-  const resetPassword = async (email) => {
-    await sendPasswordResetEmail(auth, email)
-  }
-
-  const signOut = async () => {
-    await fbSignOut(auth)
-    setProfile(null)
-  }
-
-  const value = {
-    user,
-    profile,
-    loading,
-    isAuthed: Boolean(user),
-    isApproved: profile?.status === 'approved',
-    isAdmin: roleIsAdmin(profile?.role),
-    isApprover: roleIsApprover(profile?.role),
-    role: profile?.role || null,
-    orgId: profile?.orgId || null,
-    orgName: profile?.orgName || '',
-    registerOrganization,
-    signUpMember,
-    login,
-    resetPassword,
-    signOut,
-    refreshProfile: () => user && refreshProfile(user.uid),
-  }
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

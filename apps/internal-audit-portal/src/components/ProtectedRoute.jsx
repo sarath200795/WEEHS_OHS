@@ -1,33 +1,8 @@
-import { Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { FullPageSpinner } from './ui/Spinner'
-
 /**
- * Guards the authenticated app:
- *  - not signed in       -> /login
- *  - signed in, pending  -> /pending
- *  - admin-only route, not admin -> redirect to dashboard
+ * Login has been removed from this app, so this guard is now a pass-through:
+ * it simply renders its children. Kept as a component (rather than deleted) so
+ * the existing route definitions in App.jsx don't need restructuring.
  */
-export default function ProtectedRoute({ children, adminOnly = false }) {
-  const { isAuthenticated, isApproved, isAdmin, profile, loading } = useAuth()
-  const location = useLocation()
-
-  if (loading) return <FullPageSpinner />
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />
-  }
-
-  // Signed in but profile not yet approved (or no profile doc found).
-  if (!isApproved) {
-    if (profile?.status === 'pending' || !profile) {
-      return <Navigate to="/pending" replace />
-    }
-  }
-
-  if (adminOnly && !isAdmin) {
-    return <Navigate to="/" replace />
-  }
-
+export default function ProtectedRoute({ children }) {
   return children
 }

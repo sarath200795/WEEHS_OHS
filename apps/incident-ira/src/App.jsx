@@ -8,11 +8,7 @@ import { isFirebaseConfigured } from './firebase'
 import SetupNeeded from './pages/SetupNeeded'
 
 // Route-level code splitting — each page is fetched only when navigated to.
-const Login = lazy(() => import('./pages/Login'))
-const Signup = lazy(() => import('./pages/Signup'))
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
-const RegisterOrg = lazy(() => import('./pages/RegisterOrg'))
-const PendingApproval = lazy(() => import('./pages/PendingApproval'))
+// Login/signup routes have been removed; the app opens straight into the app.
 const Legal = lazy(() => import('./pages/Legal'))
 const Diagnostics = lazy(() => import('./pages/Diagnostics'))
 
@@ -49,11 +45,6 @@ export default function App() {
     <Suspense fallback={<FullScreenLoader label="Loading…" />}>
       <Routes>
         <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/register-org" element={<RegisterOrg />} />
-          <Route path="/pending" element={<PendingApproval />} />
           <Route path="/diagnostics" element={<Diagnostics />} />
           <Route path="/privacy" element={<Legal kind="privacy" />} />
           <Route path="/terms" element={<Legal kind="terms" />} />

@@ -9,10 +9,8 @@ import { isFirebaseConfigured } from './firebase'
 import SetupNeeded from './pages/SetupNeeded'
 
 // Route-level code splitting — each page is fetched only when navigated to.
-const Login = lazy(() => import('./pages/Login'))
-const Signup = lazy(() => import('./pages/Signup'))
-const RegisterOrg = lazy(() => import('./pages/RegisterOrg'))
-const PendingApproval = lazy(() => import('./pages/PendingApproval'))
+// Login/signup routes have been removed; the app opens straight into the app.
+// The public permit link (/permit/:token) is kept — it's not an auth page.
 const PublicPermit = lazy(() => import('./pages/PublicPermit'))
 const Legal = lazy(() => import('./pages/Legal'))
 
@@ -44,10 +42,6 @@ export default function App() {
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/register-org" element={<RegisterOrg />} />
-          <Route path="/pending" element={<PendingApproval />} />
           <Route path="/permit/:token" element={<PublicPermit />} />
           <Route path="/privacy" element={<Legal kind="privacy" />} />
           <Route path="/terms" element={<Legal kind="terms" />} />

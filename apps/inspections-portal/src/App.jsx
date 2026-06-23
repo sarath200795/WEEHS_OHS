@@ -1,18 +1,13 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
-import PublicOnlyRoute from './components/PublicOnlyRoute'
 import Layout from './components/Layout'
 import { DataProvider } from './context/DataContext'
 import { FullScreenLoader } from './components/ui'
 import { isFirebaseConfigured } from './firebase'
 import SetupNeeded from './pages/SetupNeeded'
 
-const Login = lazy(() => import('./pages/Login'))
-const Signup = lazy(() => import('./pages/Signup'))
-const RegisterOrg = lazy(() => import('./pages/RegisterOrg'))
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
-const PendingApproval = lazy(() => import('./pages/PendingApproval'))
+// Login/signup routes have been removed; the app opens straight into the app.
 const Legal = lazy(() => import('./pages/Legal'))
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -42,11 +37,6 @@ export default function App() {
     <Suspense fallback={<FullScreenLoader label="Loading…" />}>
       <Routes>
         <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-        <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-        <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
-        <Route path="/register-org" element={<PublicOnlyRoute><RegisterOrg /></PublicOnlyRoute>} />
-        <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
-        <Route path="/pending" element={<PendingApproval />} />
         <Route path="/privacy" element={<Legal kind="privacy" />} />
         <Route path="/terms" element={<Legal kind="terms" />} />
 

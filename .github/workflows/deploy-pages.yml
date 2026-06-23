@@ -1,0 +1,102 @@
+name: Deploy hub + modules to GitHub Pages
+
+# Builds the WEEHS OHS hub (home page) and the five login-free modules into a
+# single static site and publishes it to GitHub Pages.
+#
+#   https://<owner>.github.io/<repo>/                      -> hub home page
+#   https://<owner>.github.io/<repo>/incident-ira/         -> Incident IRA
+#   https://<owner>.github.io/<repo>/inspections-portal/   -> Inspections
+#   https://<owner>.github.io/<repo>/internal-audit-portal/-> Internal Audit
+#   https://<owner>.github.io/<repo>/hse-committee-meeting/-> HSE Committee
+#   https://<owner>.github.io/<repo>/permit-to-work/       -> Permit to Work
+#
+# The module apps need Firebase web config to show data; add it as repo secrets
+# (VITE_FIREBASE_*) and it is baked in below. Without it the modules still load
+# (no login) but show their "Configure Firebase" setup screen.
+
+on:
+  push:
+    branches: [claude/sharp-heisenberg-88fnw9]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Firebase web config (optional) — shared by every module build.
+      VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build hub + modules
+        run: |
+          set -euo pipefail
+          REPO="${{ github.event.repository.name }}"
+          MODULES="incident-ira inspections-portal internal-audit-portal hse-committee-meeting permit-to-work"
+
+          # Point the hub tiles at the deployed module sub-paths.
+          export VITE_INCIDENT_IRA_URL="/$REPO/incident-ira/"
+          export VITE_INSPECTIONS_URL="/$REPO/inspections-portal/"
+          export VITE_INTERNAL_AUDIT_URL="/$REPO/internal-audit-portal/"
+          export VITE_HSE_COMMITTEE_URL="/$REPO/hse-committee-meeting/"
+          export VITE_PERMIT_TO_WORK_URL="/$REPO/permit-to-work/"
+
+          # Hub at the site root.
+          npm run build --workspace apps/hub -- --base="/$REPO/"
+          rm -rf site && mkdir -p site
+          cp -r apps/hub/dist/. site/
+
+          # Each module under its own sub-path.
+          for m in $MODULES; do
+            npm run build --workspace "apps/$m" -- --base="/$REPO/$m/"
+            mkdir -p "site/$m"
+            cp -r "apps/$m/dist/." "site/$m/"
+            # SPA fallback for client-side routes within the module.
+            cp "apps/$m/dist/index.html" "site/$m/404.html"
+          done
+
+          # SPA fallback for the hub.
+          cp site/index.html site/404.html
+          # Jekyll off so files/folders starting with _ are served verbatim.
+          touch site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+        with:
+          # Auto-enable Pages (Source = GitHub Actions) on first run so no manual
+          # toggle in repo Settings is needed.
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
