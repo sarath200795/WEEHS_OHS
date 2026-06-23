@@ -16,7 +16,7 @@ name: Deploy hub + modules to GitHub Pages
 
 on:
   push:
-    branches: [claude/sharp-heisenberg-88fnw9]
+    branches: [main, claude/sharp-heisenberg-88fnw9]
   workflow_dispatch:
 
 permissions:
