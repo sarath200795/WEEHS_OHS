@@ -82,6 +82,10 @@ jobs:
           touch site/.nojekyll
 
       - uses: actions/configure-pages@v5
+        with:
+          # Auto-enable Pages (Source = GitHub Actions) on first run so no manual
+          # toggle in repo Settings is needed.
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
