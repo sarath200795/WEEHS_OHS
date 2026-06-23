@@ -1,0 +1,207 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// HECP / LOTO — Firestore security rules.
+//
+// Multi-tenant isolation by `orgId`, role/permission enforcement, and an
+// append-only audit trail. Deliberate PUBLIC reads (documented, minimal):
+//   * organizations  — get/list only, so the signup screen can show the org
+//                       dropdown BEFORE a user authenticates. Only org names
+//                       are exposed; all member/procedure data stays protected.
+//   * procedures      — single-doc GET only, so a scanned QR code can display a
+//                       procedure without login. Listing/querying still requires
+//                       being an approved org member. Performing LOTO requires
+//                       auth + loto.perform + status == 'approved'.
+//   * procedurePhotos — single-doc GET only (the QR scan view shows photos).
+// Everything else is members-only and write access is permission-gated.
+// ---------------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function meExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Current user is an approved admin (holds users.manage) in the given org.
+    function isOrgManager(orgId) {
+      return signedIn()
+        && meExists()
+        && me().orgId == orgId
+        && me().status == 'approved'
+        && ('users.manage' in me().permissions);
+    }
+
+    function isApprovedMember() {
+      return signedIn() && meExists() && me().status == 'approved';
+    }
+
+    function hasPerm(p) {
+      return isApprovedMember() && (p in me().permissions);
+    }
+
+    // orgId is a non-empty string and matches the caller's org.
+    function inMyOrg() {
+      return request.resource.data.orgId is string
+        && request.resource.data.orgId == me().orgId;
+    }
+
+    // orgId can never change on update (no cross-tenant moves).
+    function orgUnchanged() {
+      return request.resource.data.orgId == resource.data.orgId;
+    }
+
+    match /organizations/{orgId} {
+      // Public get/list so the signup org dropdown can load pre-auth.
+      allow get, list: if true;
+      // Creator stamps themselves as createdBy; that powers the admin-user check.
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.name is string;
+      allow update, delete: if false; // not editable from the client
+    }
+
+    match /users/{uid} {
+      // Own doc always; other docs only within the same organization.
+      allow read: if signedIn() && (
+        request.auth.uid == uid
+        || (meExists() && me().orgId == resource.data.orgId)
+      );
+
+      // Self-creation only, and either:
+      //  - joining as a pending member (no role/permissions), or
+      //  - creating the org as its admin (verified via the org's createdBy
+      //    written in the same transaction).
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.orgId is string
+        && (
+          (
+            request.resource.data.status == 'pending'
+            && request.resource.data.role == null
+            && request.resource.data.permissions.size() == 0
+          )
+          || (
+            request.resource.data.status == 'approved'
+            && request.resource.data.role == 'admin'
+            && getAfter(/databases/$(database)/documents/organizations/$(request.resource.data.orgId)).data.createdBy == request.auth.uid
+          )
+        );
+
+      // Only an org manager may change another member's role/status/permissions,
+      // and may never move a user to a different organization.
+      allow update: if isOrgManager(resource.data.orgId)
+        && request.auth.uid != uid
+        && orgUnchanged();
+
+      allow delete: if false;
+    }
+
+    match /procedures/{pid} {
+      // Single-doc reads are public so a scanned QR code shows the procedure
+      // without login (perform actions still require auth + permission).
+      allow get: if true;
+      // Listing/querying is restricted to members of the procedure's org.
+      allow list: if isApprovedMember() && resource.data.orgId == me().orgId;
+
+      allow create: if isApprovedMember()
+        && inMyOrg()
+        && hasPerm('procedure.create');
+
+      // Coarse-grained: any approved member of the org holding a relevant
+      // permission may update (revise / approve / send / lock-out). orgId is
+      // immutable and status must stay a known value.
+      allow update: if isApprovedMember()
+        && resource.data.orgId == me().orgId
+        && orgUnchanged()
+        && request.resource.data.status in ['draft', 'pending_approval', 'approved', 'rejected']
+        && (
+          hasPerm('procedure.revise')
+          || hasPerm('procedure.approve')
+          || hasPerm('procedure.sendForApproval')
+          // Performing LOTO (lock/unlock) is only allowed on APPROVED procedures.
+          || (hasPerm('loto.perform') && resource.data.status == 'approved')
+        );
+
+      allow delete: if isApprovedMember()
+        && resource.data.orgId == me().orgId
+        && hasPerm('procedure.delete');
+    }
+
+    // Organization sites (locations). Admin-managed; everyone in the org reads.
+    match /sites/{id} {
+      allow read: if isApprovedMember() && resource.data.orgId == me().orgId;
+      allow create: if isApprovedMember()
+        && inMyOrg()
+        && request.resource.data.name is string
+        && ('users.manage' in me().permissions);
+      allow update, delete: if isApprovedMember()
+        && resource.data.orgId == me().orgId
+        && orgUnchanged()
+        && ('users.manage' in me().permissions);
+    }
+
+    // Authorized LOTO technicians (name + dedicated lock no.). Admin-managed.
+    match /technicians/{id} {
+      allow read: if isApprovedMember() && resource.data.orgId == me().orgId;
+      allow create: if isApprovedMember()
+        && inMyOrg()
+        && request.resource.data.name is string
+        && ('users.manage' in me().permissions);
+      allow update, delete: if isApprovedMember()
+        && resource.data.orgId == me().orgId
+        && orgUnchanged()
+        && ('users.manage' in me().permissions);
+    }
+
+    // Lock inventory (physical locks: lock no. + type). Admin-managed.
+    match /locks/{id} {
+      allow read: if isApprovedMember() && resource.data.orgId == me().orgId;
+      allow create: if isApprovedMember()
+        && inMyOrg()
+        && request.resource.data.lockNo is string
+        && request.resource.data.type in ['personal', 'department']
+        && ('users.manage' in me().permissions);
+      allow update, delete: if isApprovedMember()
+        && resource.data.orgId == me().orgId
+        && orgUnchanged()
+        && request.resource.data.type in ['personal', 'department']
+        && ('users.manage' in me().permissions);
+    }
+
+    // Append-only LOTO activity log (audit trail). Never editable/deletable.
+    match /lotoEvents/{id} {
+      allow read: if isApprovedMember() && resource.data.orgId == me().orgId;
+      allow create: if isApprovedMember()
+        && inMyOrg()
+        && hasPerm('loto.perform');
+      allow update, delete: if false;
+    }
+
+    // Isolation-point photos (compressed data URLs), stored separately from the
+    // main procedure doc so list/dashboard reads stay light.
+    match /procedurePhotos/{pid} {
+      allow get: if true; // public so the QR scan view can show photos
+      allow list: if false;
+      allow create, update: if isApprovedMember()
+        && inMyOrg()
+        && (hasPerm('procedure.create') || hasPerm('procedure.revise'));
+      allow delete: if isApprovedMember()
+        && resource.data.orgId == me().orgId
+        && hasPerm('procedure.delete');
+    }
+
+    // Everything else is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
